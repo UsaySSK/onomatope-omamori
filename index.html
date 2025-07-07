@@ -37,7 +37,7 @@
             let pyodide = await loadPyodide();
             console.log("Step 1 Complete: Pyodide core loaded.");
 
-            // Step 2: ZIPファイルをダウンロードし、Pyodideの仮想ファイルシステムに展開
+            // Step 2: ZIPファイルをダウンロード
             console.log("Step 2: Fetching assets.zip...");
             const zipResponse = await fetch("assets.zip");
             if (!zipResponse.ok) { // エラーチェックを追加
@@ -45,8 +45,7 @@
                 return; // 処理を中断
             }
             const zipBuffer = await zipResponse.arrayBuffer();
-            pyodide.FS.unpackArchive(zipBuffer, "/", "zip");
-            console.log("Step 2 Complete: assets.zip unpacked.");
+            console.log("Step 2 Complete: assets.zip fetched.");
 
             // Step 3: main.pyをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
             console.log("Step 3: Fetching main.py...");
@@ -62,19 +61,29 @@
             // Step 4: Pygameのキャンバス要素をPyodideに渡す
             pyodide.globals.set("canvas_id", "pygame-canvas");
 
-            // Step 5: Pythonコードの実行準備とパッケージインストール
-            console.log("Step 5: Preparing Python environment and installing 'pygame-wasm'...");
+            // Step 5: Pythonコードの実行準備とパッケージインストール、およびZIPの展開
+            console.log("Step 5: Preparing Python environment, installing 'pygame-wasm', and unpacking assets.zip...");
             try {
-                // ここで micropip を使って pygame-wasm をインストールします
+                // ここで micropip を使って pygame-wasm をインストールし、
+                // さらに Python 側で zip を展開します。
                 await pyodide.runPythonAsync(`
                     import micropip
                     print("Micropip imported. Installing pygame-wasm...")
                     await micropip.install("pygame-wasm")
                     print("pygame-wasm installed.")
+
+                    # ZIPファイルをPython側で展開
+                    # JavaScriptからarrayBufferをPythonに渡します
+                    import io, zipfile
+                    zip_data = io.BytesIO(pyodide.to_bytes(pyodide.FS.readFile("assets.zip")))
+                    with zipfile.ZipFile(zip_data, 'r') as zip_ref:
+                        zip_ref.extractall('/') # 仮想ファイルシステムのルートに展開
+
+                    print("assets.zip unpacked via Python.")
                 `);
-                console.log("Step 5 Complete: 'pygame-wasm' installed via Python.");
+                console.log("Step 5 Complete: Python environment set up and assets unpacked.");
             } catch (error) {
-                console.error("Error installing 'pygame-wasm' via Python:", error);
+                console.error("Error during Python environment setup or assets unpacking:", error);
                 return; // エラーがあれば中断
             }
 
