@@ -37,10 +37,11 @@
             let pyodide = await loadPyodide();
             console.log("Step 1 Complete: Pyodide core loaded.");
 
-            // Step 2: micropipをJavaScript側で事前にロード
-            console.log("Step 2: Loading 'micropip' package via JavaScript...");
-            await pyodide.loadPackage("micropip");
-            console.log("Step 2 Complete: 'micropip' loaded.");
+            // Step 2: PygameをJavaScript側で直接ロード (micropipは不要)
+            // Pyodideは "pygame-wasm" ではなく "pygame" という名前でPygameコアを提供しています。
+            console.log("Step 2: Loading 'pygame' package via JavaScript...");
+            await pyodide.loadPackage("pygame"); // ここを "pygame" に変更
+            console.log("Step 2 Complete: 'pygame' loaded.");
 
             // Step 3: assets.zipファイルをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
             console.log("Step 3: Fetching assets.zip...");
@@ -50,8 +51,7 @@
                 return; // 処理を中断
             }
             const zipBuffer = await zipResponse.arrayBuffer();
-            // 直接assets.zipというファイル名でPyodideのFSに書き込む
-            pyodide.FS.writeFile("assets.zip", new Uint8Array(zipBuffer)); // `new Uint8Array` でバイナリデータを正確に書き込む
+            pyodide.FS.writeFile("assets.zip", new Uint8Array(zipBuffer));
             console.log("Step 3 Complete: assets.zip fetched and written to Pyodide FS.");
 
             // Step 4: main.pyをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
@@ -68,23 +68,14 @@
             // Step 5: Pygameのキャンバス要素をPyodideに渡す
             pyodide.globals.set("canvas_id", "pygame-canvas");
 
-            // Step 6: Pythonコードの実行準備とパッケージインストール、およびZIPの展開
-            console.log("Step 6: Preparing Python environment, installing 'pygame-wasm', and unpacking assets.zip (in Python)...");
+            // Step 6: Pythonコードの実行準備とZIPの展開
+            console.log("Step 6: Preparing Python environment and unpacking assets.zip (in Python)...");
             try {
-                // ここで micropip を使って pygame-wasm をインストールし、
-                // さらに Python 側で zip を展開します。
+                // micropipでのpygame-wasmインストールは不要になったため削除
                 await pyodide.runPythonAsync(`
-                    import micropip
                     import io, zipfile
                     import os
 
-                    print("Python: Micropip imported. Installing pygame-wasm...")
-                    await micropip.install("pygame-wasm")
-                    print("Python: pygame-wasm installed.")
-
-                    # ZIPファイルをPython側で展開
-                    # JavaScriptからarrayBufferをPythonに渡す必要はなく、
-                    # 既にpyodide.FSに書き込まれている "assets.zip" を読み込みます。
                     print("Python: Unpacking assets.zip...")
                     with open("assets.zip", "rb") as f:
                         zip_data = io.BytesIO(f.read())
