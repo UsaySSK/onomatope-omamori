@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>今日のオノマトペ占い</title>
+    <style>
+        /* ページ全体の中央に表示し、余白をなくすためのスタイル */
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* 画面全体の高さ */
+            background-color: #222; /* 背景色 */
+        }
+        /* Pygameが表示されるキャンバスのスタイル */
+        canvas {
+            border: 1px solid #444; /* 枠線 */
+            /* 画面サイズに合わせて調整したい場合は max-width/height を使用 */
+            max-width: 100vw;
+            max-height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="pygame-canvas"></canvas>
+
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+
+    <script type="text/javascript">
+        async function main() {
+            // Pyodideの読み込み
+            let pyodide = await loadPyodide();
+
+            // micropip（Pythonパッケージ管理ツール）を読み込み
+            await pyodide.loadPackage("micropip");
+            // pygame-wasmをインストール
+            // PygameをWebAssemblyで動かすためのライブラリです
+            await micropip.install("pygame-wasm");
+
+            // ZIPファイルをダウンロードし、Pyodideの仮想ファイルシステムに展開
+            console.log("Fetching assets.zip...");
+            const zipResponse = await fetch("assets.zip");
+            const zipBuffer = await zipResponse.arrayBuffer();
+            // ZIPファイルの内容をPyodideの仮想ファイルシステム（/）に展開
+            // backgrounds/, bgm.mp3, data.csv, beta.png が / の直下に展開されます
+            pyodide.FS.unpackArchive(zipBuffer, "/", "zip");
+            console.log("assets.zip unpacked.");
+
+            // main.pyをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
+            console.log("Fetching main.py...");
+            const mainPyResponse = await fetch("main.py");
+            const mainPyCode = await mainPyResponse.text();
+            pyodide.FS.writeFile("main.py", mainPyCode);
+            console.log("main.py loaded.");
+
+            // Pygameのキャンバス要素をPyodideに渡す
+            // これにより、Pygameの画面出力がHTMLのcanvas要素に表示されます
+            // このidは main.py の pygame.display.set_mode() で自動的に使われるか、
+            // pygame-wasmがPyodideのCanvasを認識して紐付けます。
+            // 実際は Pygame-wasm が自動的に 'pygame-canvas' IDのキャンバスを探します。
+            pyodide.globals.set("canvas_id", "pygame-canvas");
+
+            // Pythonコードを実行
+            console.log("Running main.py...");
+            await pyodide.runPythonAsync(`
+                import sys
+                import os
+                # Pygame-wasmが標準出力/エラー出力をHTMLのコンソールにリダイレクトするように設定
+                # Webブラウザの開発者ツールでprint()の出力が見れるようになります
+                sys.stdout.flush = sys.stdout.softspace = None
+                sys.stderr.flush = sys.stderr.softspace = None
+
+                # Pyodideの仮想ファイルシステムのルートにいることを確認
+                # assets.zipが展開された場所を想定
+                os.chdir('/')
+                
+                # main.pyを実行
+                exec(open('main.py').read())
+            `);
+            console.log("main.py finished.");
+
+        }
+        main();
+    </script>
+</body>
+</html>
