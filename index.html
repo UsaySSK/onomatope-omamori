@@ -37,18 +37,25 @@
             let pyodide = await loadPyodide();
             console.log("Step 1 Complete: Pyodide core loaded.");
 
-            // Step 2: ZIPファイルをダウンロード
-            console.log("Step 2: Fetching assets.zip...");
+            // Step 2: micropipをJavaScript側で事前にロード
+            console.log("Step 2: Loading 'micropip' package via JavaScript...");
+            await pyodide.loadPackage("micropip");
+            console.log("Step 2 Complete: 'micropip' loaded.");
+
+            // Step 3: assets.zipファイルをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
+            console.log("Step 3: Fetching assets.zip...");
             const zipResponse = await fetch("assets.zip");
             if (!zipResponse.ok) { // エラーチェックを追加
                 console.error("Error: Failed to fetch assets.zip:", zipResponse.status, zipResponse.statusText);
                 return; // 処理を中断
             }
             const zipBuffer = await zipResponse.arrayBuffer();
-            console.log("Step 2 Complete: assets.zip fetched.");
+            // 直接assets.zipというファイル名でPyodideのFSに書き込む
+            pyodide.FS.writeFile("assets.zip", new Uint8Array(zipBuffer)); // `new Uint8Array` でバイナリデータを正確に書き込む
+            console.log("Step 3 Complete: assets.zip fetched and written to Pyodide FS.");
 
-            // Step 3: main.pyをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
-            console.log("Step 3: Fetching main.py...");
+            // Step 4: main.pyをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
+            console.log("Step 4: Fetching main.py...");
             const mainPyResponse = await fetch("main.py");
             if (!mainPyResponse.ok) { // エラーチェックを追加
                 console.error("Error: Failed to fetch main.py:", mainPyResponse.status, mainPyResponse.statusText);
@@ -56,54 +63,59 @@
             }
             const mainPyCode = await mainPyResponse.text();
             pyodide.FS.writeFile("main.py", mainPyCode);
-            console.log("Step 3 Complete: main.py loaded.");
+            console.log("Step 4 Complete: main.py loaded.");
 
-            // Step 4: Pygameのキャンバス要素をPyodideに渡す
+            // Step 5: Pygameのキャンバス要素をPyodideに渡す
             pyodide.globals.set("canvas_id", "pygame-canvas");
 
-            // Step 5: Pythonコードの実行準備とパッケージインストール、およびZIPの展開
-            console.log("Step 5: Preparing Python environment, installing 'pygame-wasm', and unpacking assets.zip...");
+            // Step 6: Pythonコードの実行準備とパッケージインストール、およびZIPの展開
+            console.log("Step 6: Preparing Python environment, installing 'pygame-wasm', and unpacking assets.zip (in Python)...");
             try {
                 // ここで micropip を使って pygame-wasm をインストールし、
                 // さらに Python 側で zip を展開します。
                 await pyodide.runPythonAsync(`
                     import micropip
-                    print("Micropip imported. Installing pygame-wasm...")
+                    import io, zipfile
+                    import os
+
+                    print("Python: Micropip imported. Installing pygame-wasm...")
                     await micropip.install("pygame-wasm")
-                    print("pygame-wasm installed.")
+                    print("Python: pygame-wasm installed.")
 
                     # ZIPファイルをPython側で展開
-                    # JavaScriptからarrayBufferをPythonに渡します
-                    import io, zipfile
-                    zip_data = io.BytesIO(pyodide.to_bytes(pyodide.FS.readFile("assets.zip")))
+                    # JavaScriptからarrayBufferをPythonに渡す必要はなく、
+                    # 既にpyodide.FSに書き込まれている "assets.zip" を読み込みます。
+                    print("Python: Unpacking assets.zip...")
+                    with open("assets.zip", "rb") as f:
+                        zip_data = io.BytesIO(f.read())
+                    
                     with zipfile.ZipFile(zip_data, 'r') as zip_ref:
                         zip_ref.extractall('/') # 仮想ファイルシステムのルートに展開
 
-                    print("assets.zip unpacked via Python.")
+                    print("Python: assets.zip unpacked via Python.")
                 `);
-                console.log("Step 5 Complete: Python environment set up and assets unpacked.");
+                console.log("Step 6 Complete: Python environment set up and assets unpacked.");
             } catch (error) {
                 console.error("Error during Python environment setup or assets unpacking:", error);
                 return; // エラーがあれば中断
             }
 
-            // Step 6: main.pyを実行
-            console.log("Step 6: Running main.py...");
+            // Step 7: main.pyを実行
+            console.log("Step 7: Running main.py...");
             try {
                 await pyodide.runPythonAsync(`
                     import sys
-                    import os
                     # Pygame-wasmが標準出力/エラー出力をHTMLのコンソールにリダイレクトするように設定
                     sys.stdout.flush = sys.stdout.softspace = None
                     sys.stderr.flush = sys.stderr.softspace = None
 
-                    # Pyodideの仮想ファイルシステムのルートにいることを確認
+                    # Pyodideの仮想ファイルシステムのルートにいることを確認（念のため再度）
                     os.chdir('/')
                     
                     # main.pyを実行
                     exec(open('main.py').read())
                 `);
-                console.log("Step 6 Complete: main.py finished.");
+                console.log("Step 7 Complete: main.py finished.");
             } catch (error) {
                 console.error("Error during Python code execution:", error);
             }
