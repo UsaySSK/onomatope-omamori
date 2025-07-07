@@ -38,10 +38,27 @@
             console.log("Step 1 Complete: Pyodide core loaded.");
 
             // Step 2: micropipをJavaScript側で事前にロード
-            // これでPythonコードからmicropipをインポートできるようになります
             console.log("Step 2: Loading 'micropip' package via JavaScript...");
             await pyodide.loadPackage("micropip");
             console.log("Step 2 Complete: 'micropip' loaded.");
+
+            // 新しい Step: pygame-wasm の .whl ファイルを直接ダウンロード
+            // Pygame-wasmのGitHubリリースページから直接ダウンロードURLを取得
+            const pygameWasmWhlUrl = "https://github.com/pygame-community/pygame-wasm/releases/download/1.2.0/pygame_wasm-1.2.0-py3-none-any.whl";
+            const pygameWasmWhlFileName = "pygame_wasm-1.2.0-py3-none-any.whl";
+            console.log(`Step 2.5: Fetching ${pygameWasmWhlFileName}...`);
+            try {
+                const whlResponse = await fetch(pygameWasmWhlUrl);
+                if (!whlResponse.ok) {
+                    throw new Error(`Failed to fetch ${pygameWasmWhlFileName}: ${whlResponse.status} ${whlResponse.statusText}`);
+                }
+                const whlBuffer = await whlResponse.arrayBuffer();
+                pyodide.FS.writeFile(pygameWasmWhlFileName, new Uint8Array(whlBuffer));
+                console.log(`Step 2.5 Complete: ${pygameWasmWhlFileName} fetched and written to Pyodide FS.`);
+            } catch (error) {
+                console.error(`Error fetching ${pygameWasmWhlFileName}:`, error);
+                return; // エラーがあれば中断
+            }
 
             // Step 3: assets.zipファイルをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
             console.log("Step 3: Fetching assets.zip...");
@@ -68,19 +85,19 @@
             // Step 5: Pygameのキャンバス要素をPyodideに渡す
             pyodide.globals.set("canvas_id", "pygame-canvas");
 
-            // Step 6: Pythonコードの実行準備、'pygame-wasm'のインストール、およびZIPの展開
+            // Step 6: Python環境の準備、ローカルのpygame-wasm .whlファイルのインストール、およびZIPの展開
             console.log("Step 6: Preparing Python environment, installing 'pygame-wasm', and unpacking assets.zip (in Python)...");
             try {
-                // micropip を使って pygame-wasm をインストールします
+                // micropip を使ってダウンロードした.whlファイルをインストール
                 await pyodide.runPythonAsync(`
                     import micropip
                     import io, zipfile
                     import os
 
-                    print("Python: Micropip imported. Installing pygame-wasm...")
-                    # ここでpygame-wasmをインストール
-                    await micropip.install("pygame-wasm")
-                    print("Python: pygame-wasm installed.")
+                    print("Python: Micropip imported. Installing pygame-wasm from local .whl file...")
+                    # ここでダウンロードした.whlファイルを指定してインストール
+                    await micropip.install("` + pygameWasmWhlFileName + `")
+                    print("Python: pygame-wasm installed from local file.")
 
                     # ZIPファイルをPython側で展開
                     print("Python: Unpacking assets.zip...")
