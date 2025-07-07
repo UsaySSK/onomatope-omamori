@@ -31,56 +31,61 @@
     <script type="text/javascript">
         async function main() {
             // Pyodideの読み込み
+            console.log("Loading Pyodide...");
             let pyodide = await loadPyodide();
+            console.log("Pyodide loaded.");
 
-            // micropip（Pythonパッケージ管理ツール）を読み込み
-            await pyodide.loadPackage("micropip");
-            // pygame-wasmをインストール
-            // PygameをWebAssemblyで動かすためのライブラリです
-            await micropip.install("pygame-wasm");
+            // micropip と pygame-wasm を Pyodide の loadPackages で直接ロード
+            // これにより 'micropip is not defined' エラーを回避します。
+            console.log("Loading packages: micropip and pygame-wasm...");
+            await pyodide.loadPackages(["micropip", "pygame-wasm"]);
+            console.log("Packages loaded.");
 
             // ZIPファイルをダウンロードし、Pyodideの仮想ファイルシステムに展開
             console.log("Fetching assets.zip...");
             const zipResponse = await fetch("assets.zip");
+            if (!zipResponse.ok) { // エラーチェックを追加
+                console.error("Failed to fetch assets.zip:", zipResponse.status, zipResponse.statusText);
+                return; // 処理を中断
+            }
             const zipBuffer = await zipResponse.arrayBuffer();
-            // ZIPファイルの内容をPyodideの仮想ファイルシステム（/）に展開
-            // backgrounds/, bgm.mp3, data.csv, beta.png が / の直下に展開されます
             pyodide.FS.unpackArchive(zipBuffer, "/", "zip");
             console.log("assets.zip unpacked.");
 
             // main.pyをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
             console.log("Fetching main.py...");
             const mainPyResponse = await fetch("main.py");
+            if (!mainPyResponse.ok) { // エラーチェックを追加
+                console.error("Failed to fetch main.py:", mainPyResponse.status, mainPyResponse.statusText);
+                return; // 処理を中断
+            }
             const mainPyCode = await mainPyResponse.text();
             pyodide.FS.writeFile("main.py", mainPyCode);
             console.log("main.py loaded.");
 
             // Pygameのキャンバス要素をPyodideに渡す
-            // これにより、Pygameの画面出力がHTMLのcanvas要素に表示されます
-            // このidは main.py の pygame.display.set_mode() で自動的に使われるか、
-            // pygame-wasmがPyodideのCanvasを認識して紐付けます。
-            // 実際は Pygame-wasm が自動的に 'pygame-canvas' IDのキャンバスを探します。
             pyodide.globals.set("canvas_id", "pygame-canvas");
 
             // Pythonコードを実行
             console.log("Running main.py...");
-            await pyodide.runPythonAsync(`
-                import sys
-                import os
-                # Pygame-wasmが標準出力/エラー出力をHTMLのコンソールにリダイレクトするように設定
-                # Webブラウザの開発者ツールでprint()の出力が見れるようになります
-                sys.stdout.flush = sys.stdout.softspace = None
-                sys.stderr.flush = sys.stderr.softspace = None
+            try {
+                await pyodide.runPythonAsync(`
+                    import sys
+                    import os
+                    # Pygame-wasmが標準出力/エラー出力をHTMLのコンソールにリダイレクトするように設定
+                    sys.stdout.flush = sys.stdout.softspace = None
+                    sys.stderr.flush = sys.stderr.softspace = None
 
-                # Pyodideの仮想ファイルシステムのルートにいることを確認
-                # assets.zipが展開された場所を想定
-                os.chdir('/')
-                
-                # main.pyを実行
-                exec(open('main.py').read())
-            `);
-            console.log("main.py finished.");
-
+                    # Pyodideの仮想ファイルシステムのルートにいることを確認
+                    os.chdir('/')
+                    
+                    # main.pyを実行
+                    exec(open('main.py').read())
+                `);
+                console.log("main.py finished.");
+            } catch (error) {
+                console.error("Error running Python code:", error);
+            }
         }
         main();
     </script>
