@@ -32,22 +32,22 @@
         async function main() {
             console.log("Starting Pyodide application...");
 
-            // Pyodideの読み込み
+            // Step 1: Pyodideの読み込み
             console.log("Step 1: Loading Pyodide core...");
             let pyodide = await loadPyodide();
             console.log("Step 1 Complete: Pyodide core loaded.");
 
-            // micropipとpygame-wasmをPyodideにロード
-            // v0.25.0では個別にloadPackageを呼び出すか、
-            // micropipを使ってインストールします。
-            // ここでは直接パッケージをロードする方法を使います。
+            // Step 2: micropipをPyodideにロード
+            // これで pyodide.micropip としてアクセス可能になります
             console.log("Step 2: Loading 'micropip' package...");
             await pyodide.loadPackage("micropip");
             console.log("Step 2 Complete: 'micropip' loaded.");
 
-            console.log("Step 3: Loading 'pygame-wasm' package...");
-            await pyodide.loadPackage("pygame-wasm");
-            console.log("Step 3 Complete: 'pygame-wasm' loaded.");
+            // Step 3: micropipを使って 'pygame-wasm' をインストール
+            // pyodide.micropip.install() で呼び出すのが正しい方法です。
+            console.log("Step 3: Installing 'pygame-wasm' via micropip...");
+            await pyodide.micropip.install("pygame-wasm");
+            console.log("Step 3 Complete: 'pygame-wasm' installed.");
 
             // ZIPファイルをダウンロードし、Pyodideの仮想ファイルシステムに展開
             console.log("Step 4: Fetching assets.zip...");
