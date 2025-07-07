@@ -37,11 +37,30 @@
             let pyodide = await loadPyodide();
             console.log("Step 1 Complete: Pyodide core loaded.");
 
-            // Step 2: micropipをJavaScript側で事前にロード
-            // これでPythonコードからmicropipをインポートできるようになります
-            console.log("Step 2: Loading 'micropip' package via JavaScript...");
-            await pyodide.loadPackage("micropip");
-            console.log("Step 2 Complete: 'micropip' loaded.");
+            // Step 2: PygameをJavaScript側で直接ロード (micropipは使わない)
+            // Pyodideは "pygame-wasm" ではなく "pygame" という名前でPygameコアを提供していることが多い
+            console.log("Step 2: Loading 'pygame' package via JavaScript...");
+            try {
+                await pyodide.loadPackage("pygame"); // ここを "pygame" に戻す
+                console.log("Step 2 Complete: 'pygame' loaded.");
+            } catch (error) {
+                console.error("Error loading 'pygame' package:", error);
+                console.warn("Attempting to load 'pygame-wasm' via micropip as a fallback...");
+                // もし "pygame" がダメなら、micropipを使って "pygame-wasm" を試すフォールバック
+                try {
+                    await pyodide.loadPackage("micropip"); // micropipをロード
+                    await pyodide.runPythonAsync(`
+                        import micropip
+                        print("Python: Attempting micropip install of pygame-wasm...")
+                        await micropip.install("pygame-wasm")
+                        print("Python: pygame-wasm installed via fallback.")
+                    `);
+                    console.log("Step 2 Complete: 'pygame-wasm' loaded via micropip fallback.");
+                } catch (micropipError) {
+                    console.error("Critical Error: Could not load 'pygame' or 'pygame-wasm':", micropipError);
+                    return; // 致命的なエラーなのでここで中断
+                }
+            }
 
             // Step 3: assets.zipファイルをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
             console.log("Step 3: Fetching assets.zip...");
@@ -68,21 +87,13 @@
             // Step 5: Pygameのキャンバス要素をPyodideに渡す
             pyodide.globals.set("canvas_id", "pygame-canvas");
 
-            // Step 6: Pythonコードの実行準備、'pygame-wasm'のインストール、およびZIPの展開
-            console.log("Step 6: Preparing Python environment, installing 'pygame-wasm', and unpacking assets.zip (in Python)...");
+            // Step 6: Pythonコードの実行準備とZIPの展開
+            console.log("Step 6: Preparing Python environment and unpacking assets.zip (in Python)...");
             try {
-                // micropip を使って pygame-wasm をインストールします
                 await pyodide.runPythonAsync(`
-                    import micropip
                     import io, zipfile
                     import os
 
-                    print("Python: Micropip imported. Installing pygame-wasm...")
-                    # ここでpygame-wasmをインストール
-                    await micropip.install("pygame-wasm")
-                    print("Python: pygame-wasm installed.")
-
-                    # ZIPファイルをPython側で展開
                     print("Python: Unpacking assets.zip...")
                     with open("assets.zip", "rb") as f:
                         zip_data = io.BytesIO(f.read())
