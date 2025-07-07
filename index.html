@@ -30,44 +30,52 @@
 
     <script type="text/javascript">
         async function main() {
-            // Pyodideの読み込み
-            console.log("Loading Pyodide...");
-            let pyodide = await loadPyodide();
-            console.log("Pyodide loaded.");
+            console.log("Starting Pyodide application...");
 
-            // micropip と pygame-wasm を Pyodide の loadPackages で直接ロード
-            // これにより 'micropip is not defined' エラーを回避します。
-            console.log("Loading packages: micropip and pygame-wasm...");
-            await pyodide.loadPackages(["micropip", "pygame-wasm"]);
-            console.log("Packages loaded.");
+            // Pyodideの読み込み
+            console.log("Step 1: Loading Pyodide core...");
+            let pyodide = await loadPyodide();
+            console.log("Step 1 Complete: Pyodide core loaded.");
+
+            // micropipとpygame-wasmをPyodideにロード
+            // v0.25.0では個別にloadPackageを呼び出すか、
+            // micropipを使ってインストールします。
+            // ここでは直接パッケージをロードする方法を使います。
+            console.log("Step 2: Loading 'micropip' package...");
+            await pyodide.loadPackage("micropip");
+            console.log("Step 2 Complete: 'micropip' loaded.");
+
+            console.log("Step 3: Loading 'pygame-wasm' package...");
+            await pyodide.loadPackage("pygame-wasm");
+            console.log("Step 3 Complete: 'pygame-wasm' loaded.");
 
             // ZIPファイルをダウンロードし、Pyodideの仮想ファイルシステムに展開
-            console.log("Fetching assets.zip...");
+            console.log("Step 4: Fetching assets.zip...");
             const zipResponse = await fetch("assets.zip");
             if (!zipResponse.ok) { // エラーチェックを追加
-                console.error("Failed to fetch assets.zip:", zipResponse.status, zipResponse.statusText);
+                console.error("Error: Failed to fetch assets.zip:", zipResponse.status, zipResponse.statusText);
                 return; // 処理を中断
             }
             const zipBuffer = await zipResponse.arrayBuffer();
             pyodide.FS.unpackArchive(zipBuffer, "/", "zip");
-            console.log("assets.zip unpacked.");
+            console.log("Step 4 Complete: assets.zip unpacked.");
 
             // main.pyをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
-            console.log("Fetching main.py...");
+            console.log("Step 5: Fetching main.py...");
             const mainPyResponse = await fetch("main.py");
             if (!mainPyResponse.ok) { // エラーチェックを追加
-                console.error("Failed to fetch main.py:", mainPyResponse.status, mainPyResponse.statusText);
+                console.error("Error: Failed to fetch main.py:", mainPyResponse.status, mainPyResponse.statusText);
                 return; // 処理を中断
             }
             const mainPyCode = await mainPyResponse.text();
             pyodide.FS.writeFile("main.py", mainPyCode);
-            console.log("main.py loaded.");
+            console.log("Step 5 Complete: main.py loaded.");
 
             // Pygameのキャンバス要素をPyodideに渡す
             pyodide.globals.set("canvas_id", "pygame-canvas");
 
             // Pythonコードを実行
-            console.log("Running main.py...");
+            console.log("Step 6: Running main.py...");
             try {
                 await pyodide.runPythonAsync(`
                     import sys
@@ -82,10 +90,11 @@
                     # main.pyを実行
                     exec(open('main.py').read())
                 `);
-                console.log("main.py finished.");
+                console.log("Step 6 Complete: main.py finished.");
             } catch (error) {
-                console.error("Error running Python code:", error);
+                console.error("Error during Python code execution:", error);
             }
+            console.log("Pyodide application finished.");
         }
         main();
     </script>
