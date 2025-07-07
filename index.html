@@ -37,20 +37,8 @@
             let pyodide = await loadPyodide();
             console.log("Step 1 Complete: Pyodide core loaded.");
 
-            // Step 2: micropipをPyodideにロード
-            // これで pyodide.micropip としてアクセス可能になります
-            console.log("Step 2: Loading 'micropip' package...");
-            await pyodide.loadPackage("micropip");
-            console.log("Step 2 Complete: 'micropip' loaded.");
-
-            // Step 3: micropipを使って 'pygame-wasm' をインストール
-            // pyodide.micropip.install() で呼び出すのが正しい方法です。
-            console.log("Step 3: Installing 'pygame-wasm' via micropip...");
-            await pyodide.micropip.install("pygame-wasm");
-            console.log("Step 3 Complete: 'pygame-wasm' installed.");
-
-            // ZIPファイルをダウンロードし、Pyodideの仮想ファイルシステムに展開
-            console.log("Step 4: Fetching assets.zip...");
+            // Step 2: ZIPファイルをダウンロードし、Pyodideの仮想ファイルシステムに展開
+            console.log("Step 2: Fetching assets.zip...");
             const zipResponse = await fetch("assets.zip");
             if (!zipResponse.ok) { // エラーチェックを追加
                 console.error("Error: Failed to fetch assets.zip:", zipResponse.status, zipResponse.statusText);
@@ -58,10 +46,10 @@
             }
             const zipBuffer = await zipResponse.arrayBuffer();
             pyodide.FS.unpackArchive(zipBuffer, "/", "zip");
-            console.log("Step 4 Complete: assets.zip unpacked.");
+            console.log("Step 2 Complete: assets.zip unpacked.");
 
-            // main.pyをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
-            console.log("Step 5: Fetching main.py...");
+            // Step 3: main.pyをダウンロードし、Pyodideの仮想ファイルシステムに書き込み
+            console.log("Step 3: Fetching main.py...");
             const mainPyResponse = await fetch("main.py");
             if (!mainPyResponse.ok) { // エラーチェックを追加
                 console.error("Error: Failed to fetch main.py:", mainPyResponse.status, mainPyResponse.statusText);
@@ -69,12 +57,28 @@
             }
             const mainPyCode = await mainPyResponse.text();
             pyodide.FS.writeFile("main.py", mainPyCode);
-            console.log("Step 5 Complete: main.py loaded.");
+            console.log("Step 3 Complete: main.py loaded.");
 
-            // Pygameのキャンバス要素をPyodideに渡す
+            // Step 4: Pygameのキャンバス要素をPyodideに渡す
             pyodide.globals.set("canvas_id", "pygame-canvas");
 
-            // Pythonコードを実行
+            // Step 5: Pythonコードの実行準備とパッケージインストール
+            console.log("Step 5: Preparing Python environment and installing 'pygame-wasm'...");
+            try {
+                // ここで micropip を使って pygame-wasm をインストールします
+                await pyodide.runPythonAsync(`
+                    import micropip
+                    print("Micropip imported. Installing pygame-wasm...")
+                    await micropip.install("pygame-wasm")
+                    print("pygame-wasm installed.")
+                `);
+                console.log("Step 5 Complete: 'pygame-wasm' installed via Python.");
+            } catch (error) {
+                console.error("Error installing 'pygame-wasm' via Python:", error);
+                return; // エラーがあれば中断
+            }
+
+            // Step 6: main.pyを実行
             console.log("Step 6: Running main.py...");
             try {
                 await pyodide.runPythonAsync(`
